@@ -22,7 +22,7 @@ file::file (const std::filesystem::path &path) : path_{ path }
 
         case static_cast<std::int32_t> (std::errc::file_too_large):
           throw std::runtime_error (
-              std::format ("file too large: {}", path.c_str ()));
+              std::format ("file is too large: {}", path.c_str ()));
 
         case static_cast<std::int32_t> (std::errc::io_error):
           throw std::runtime_error (

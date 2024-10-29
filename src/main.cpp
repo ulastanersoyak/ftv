@@ -1,13 +1,10 @@
+#include "crypto/encrypt.hpp"
 #include "file/file.hpp"
 
 int
 main ()
 {
   ftv::file f{ "/home/retro/ftv/test/text.txt" };
-  const auto a = ftv::write (f, "/home/retro/ftv/test/new_text.txt");
-  if (a.value () != 0)
-    {
-      return -1;
-    }
+  const auto rs = ftv::encrypt (f, "123457890123", ftv::aes_256_gcm);
   return 0;
 }
