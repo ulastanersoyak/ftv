@@ -13,6 +13,7 @@ class file
 {
 public:
   explicit file (const std::filesystem::path &path);
+  file (const std::filesystem::path &path, std::vector<std::byte> data);
 
   [[nodiscard]] const std::filesystem::path &path () const noexcept;
   [[nodiscard]] const std::vector<std::byte> &data () const noexcept;

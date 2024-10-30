@@ -1,7 +1,8 @@
+#include "crypto/decrypt.hpp"
 #include "crypto/encrypt.hpp"
+#include "crypto/encrypted_data.hpp"
 #include "crypto/serialize.hpp"
 #include "file/file.hpp"
-#include <algorithm>
 
 int
 main ()
@@ -11,29 +12,22 @@ main ()
   ftv::secure_key key{ "1234567890" };
 
   const auto encrypted = ftv::encrypt (f, key, ftv::aes_256_gcm);
+
   if (!encrypted)
     {
       return 1;
     }
 
-  const auto serialized = ftv::serialize_encrypted_data (*encrypted);
-  if (!serialized)
-    {
-      return 1;
-    }
+  const auto enc_file
+      = encrypted->to_file ("/home/retro/ftv/test/text_encrypted");
 
-  const auto deserialized = ftv::deserialize_encrypted_data (*serialized);
-  if (!deserialized)
-    {
-      return 1;
-    }
+  const auto err = ftv::write (*enc_file);
 
-  bool are_equal = encrypted->ciphertext == deserialized->ciphertext
-                   && encrypted->init_vec == deserialized->init_vec
-                   && encrypted->tag == deserialized->tag;
+  ftv::encrypted_data enc_data{ enc_file->path () };
+  const auto dec_file = ftv::decrypt (enc_data, key);
 
-  const auto reserialized = ftv::serialize_encrypted_data (*deserialized);
-  bool serialized_equal = std::ranges::equal (*serialized, *reserialized);
+  const auto err1
+      = ftv::write (*dec_file, "/home/retro/ftv/test/text_decrypted");
 
-  return are_equal && serialized_equal ? 0 : 1;
+  return 0;
 }

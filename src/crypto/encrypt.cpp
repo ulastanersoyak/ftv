@@ -11,12 +11,12 @@ namespace ftv
 {
 
 std::expected<encrypted_data, std::error_code>
-aes_256_gcm (std::span<const std::byte> data, const secure_key &key)
+aes_256_gcm (std::span<const std::byte> data, const secure_key &key) noexcept
 {
-  if (key.size () == 0 || key.size () != 32)
+  if (key.size () != 32)
     {
-      return std::unexpected (
-          std::make_error_code (std::errc::invalid_argument));
+      return std::expected<encrypted_data, std::error_code>{ std::unexpected (
+          std::make_error_code (std::errc::invalid_argument)) };
     }
 
   // generate random iv (12 bytes for GCM)
@@ -25,14 +25,14 @@ aes_256_gcm (std::span<const std::byte> data, const secure_key &key)
                   static_cast<std::int32_t> (init_vec.size ()))
       != 1)
     {
-      return std::unexpected (
-          std::make_error_code (std::errc::operation_canceled));
+      return std::expected<encrypted_data, std::error_code>{ std::unexpected (
+          std::make_error_code (std::errc::operation_canceled)) };
     }
 
   evp_cipher ctx{};
   std::vector<std::byte> ciphertext (data.size () + EVP_MAX_BLOCK_LENGTH);
   std::vector<std::byte> tag (16);
-  std::int32_t outlen;
+  std::int32_t outlen{};
 
   std::span<const unsigned char> key_span{
     reinterpret_cast<const unsigned char *> (key.get ().data ()), key.size ()
@@ -42,8 +42,8 @@ aes_256_gcm (std::span<const std::byte> data, const secure_key &key)
           ctx, EVP_aes_256_gcm (), nullptr, key_span.data (),
           reinterpret_cast<unsigned char *> (init_vec.data ())))
     {
-      return std::unexpected (
-          std::make_error_code (std::errc::operation_canceled));
+      return std::expected<encrypted_data, std::error_code>{ std::unexpected (
+          std::make_error_code (std::errc::operation_canceled)) };
     }
 
   if (!EVP_EncryptUpdate (
@@ -51,8 +51,8 @@ aes_256_gcm (std::span<const std::byte> data, const secure_key &key)
           reinterpret_cast<const unsigned char *> (data.data ()),
           static_cast<std::int32_t> (data.size ())))
     {
-      return std::unexpected (
-          std::make_error_code (std::errc::operation_canceled));
+      return std::expected<encrypted_data, std::error_code>{ std::unexpected (
+          std::make_error_code (std::errc::operation_canceled)) };
     }
 
   std::int32_t final_len;
@@ -60,39 +60,43 @@ aes_256_gcm (std::span<const std::byte> data, const secure_key &key)
           ctx, reinterpret_cast<unsigned char *> (ciphertext.data () + outlen),
           &final_len))
     {
-      return std::unexpected (
-          std::make_error_code (std::errc::operation_canceled));
+      return std::expected<encrypted_data, std::error_code>{ std::unexpected (
+          std::make_error_code (std::errc::operation_canceled)) };
     }
 
   if (!EVP_CIPHER_CTX_ctrl (ctx, EVP_CTRL_GCM_GET_TAG, 16,
                             reinterpret_cast<unsigned char *> (tag.data ())))
     {
-      return std::unexpected (
-          std::make_error_code (std::errc::operation_canceled));
+      return std::expected<encrypted_data, std::error_code>{ std::unexpected (
+          std::make_error_code (std::errc::operation_canceled)) };
     }
 
   ciphertext.resize (static_cast<std::size_t> (outlen + final_len));
 
-  return ftv::encrypted_data{ .ciphertext = std::move (ciphertext),
-                              .init_vec = std::move (init_vec),
-                              .tag = std::move (tag) };
+  return
+
+      std::expected<encrypted_data, std::error_code>{ ftv::encrypted_data{
+          std::move (ciphertext), std::move (init_vec), std::move (tag) } };
 }
 
 [[nodiscard]] std::expected<encrypted_data, std::error_code>
-encrypt (const file &source, const secure_key &key, encryption_func fn)
+encrypt (const file &source, const secure_key &key,
+         encryption_func fn) noexcept
 {
   if (source.size () == 0)
     {
-      return std::unexpected (
-          std::make_error_code (std::errc::invalid_argument));
+      return std::expected<encrypted_data, std::error_code>{ std::unexpected (
+          std::make_error_code (std::errc::invalid_argument)) };
     }
 
   auto encrypted = fn (source.data (), key);
   if (!encrypted)
     {
-      return std::unexpected (encrypted.error ());
+      return std::expected<encrypted_data, std::error_code>{ std::unexpected (
+          encrypted.error ()) };
     }
-  return encrypted;
+  return std::expected<encrypted_data, std::error_code>{ std::move (
+      encrypted) };
 }
 
 } // namespace ftv

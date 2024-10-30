@@ -36,6 +36,11 @@ file::file (const std::filesystem::path &path) : path_{ path }
     }
 }
 
+file::file (const std::filesystem::path &path, std::vector<std::byte> data)
+    : path_ (path), data_ (std::move (data))
+{
+}
+
 [[nodiscard]] const std::filesystem::path &
 file::path () const noexcept
 {
@@ -59,17 +64,16 @@ write (const file &f, const std::filesystem::path &path)
 {
   if (std::filesystem::exists (path))
     {
-      return std::error_code (std::make_error_code (std::errc::file_exists));
+      return std::make_error_code (std::errc::file_exists);
     }
   if (path.empty ())
     {
-      return std::error_code (make_error_code (std::errc::invalid_argument));
+      return make_error_code (std::errc::invalid_argument);
     }
   std::ofstream file_stream (path, std::ios::binary);
   if (!file_stream.is_open ())
     {
-      return std::error_code (
-          std::make_error_code (std::errc::no_such_file_or_directory));
+      return std::make_error_code (std::errc::no_such_file_or_directory);
     }
   const auto data = f.data ();
   file_stream.write (reinterpret_cast<const char *> (data.data ()),
@@ -77,7 +81,7 @@ write (const file &f, const std::filesystem::path &path)
 
   if (!file_stream)
     {
-      return std::error_code (std::make_error_code (std::errc::io_error));
+      return std::make_error_code (std::errc::io_error);
     }
 
   return {};

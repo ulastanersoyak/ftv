@@ -1,15 +1,16 @@
 #include "crypto/serialize.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 
 namespace ftv
 {
 
 [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
-serialize_encrypted_data (const encrypted_data &data)
+serialize_encrypted_data (const encrypted_data &data) noexcept
 {
-  if (data.init_vec.empty () || data.tag.empty ())
+  if (data.init_vec ().empty () || data.tag ().empty ())
     {
       return std::expected<std::vector<std::byte>, std::error_code> (
           std::unexpected (
@@ -18,35 +19,36 @@ serialize_encrypted_data (const encrypted_data &data)
 
   try
     {
-      const size_t total_size = 4 +                      // iv size field
-                                data.init_vec.size () +  // iv data
-                                4 +                      // tag size field
-                                data.tag.size () +       // tag data
-                                data.ciphertext.size (); // ciphertext
+      const size_t total_size = 4 +                         // iv size field
+                                data.init_vec ().size () +  // iv data
+                                4 +                         // tag size field
+                                data.tag ().size () +       // tag data
+                                data.ciphertext ().size (); // ciphertext
 
       std::vector<std::byte> serialized{};
       serialized.reserve (total_size);
 
       // add iv size
-      const auto iv_size = static_cast<std::uint32_t> (data.init_vec.size ());
+      const auto iv_size
+          = static_cast<std::uint32_t> (data.init_vec ().size ());
       std::ranges::copy (
           std::span{ reinterpret_cast<const std::byte *> (&iv_size), 4 },
           std::back_inserter (serialized));
 
       // add iv data
-      std::ranges::copy (data.init_vec, std::back_inserter (serialized));
+      std::ranges::copy (data.init_vec (), std::back_inserter (serialized));
 
       // add tag size
-      const auto tag_size = static_cast<std::uint32_t> (data.tag.size ());
+      const auto tag_size = static_cast<std::uint32_t> (data.tag ().size ());
       std::ranges::copy (
           std::span{ reinterpret_cast<const std::byte *> (&tag_size), 4 },
           std::back_inserter (serialized));
 
       // add tag data
-      std::ranges::copy (data.tag, std::back_inserter (serialized));
+      std::ranges::copy (data.tag (), std::back_inserter (serialized));
 
       // add ciphertext
-      std::ranges::copy (data.ciphertext, std::back_inserter (serialized));
+      std::ranges::copy (data.ciphertext (), std::back_inserter (serialized));
 
       return std::expected<std::vector<std::byte>, std::error_code> (
           std::move (serialized));
@@ -61,7 +63,8 @@ serialize_encrypted_data (const encrypted_data &data)
 
 [[nodiscard]]
 std::expected<encrypted_data, std::error_code>
-deserialize_encrypted_data (std::span<const std::byte> serialized_data)
+deserialize_encrypted_data (
+    std::span<const std::byte> serialized_data) noexcept
 {
   // need at least 8 bytes for the size fields
   if (serialized_data.size () < 8)
@@ -120,10 +123,8 @@ deserialize_encrypted_data (std::span<const std::byte> serialized_data)
                                              + static_cast<ssize_t> (offset),
                                          serialized_data.end ());
 
-      return std::expected<encrypted_data, std::error_code> (
-          encrypted_data{ .ciphertext = std::move (ciphertext),
-                          .init_vec = std::move (init_vec),
-                          .tag = std::move (tag) });
+      return std::expected<encrypted_data, std::error_code> (encrypted_data{
+          std::move (ciphertext), std::move (init_vec), std::move (tag) });
     }
   catch (const std::exception &)
     {
