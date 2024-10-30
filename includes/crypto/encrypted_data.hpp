@@ -18,6 +18,10 @@ public:
   encrypted_data (std::vector<std::byte> ciphertext,
                   std::vector<std::byte> init_vec, std::vector<std::byte> tag);
 
+  encrypted_data (std::vector<std::byte> &&ciphertext,
+                  std::vector<std::byte> &&init_vec,
+                  std::vector<std::byte> &&tag);
+
   [[nodiscard]] std::expected<file, std::error_code>
   to_file (const std::filesystem::path &path
            = std::filesystem::temp_directory_path ()

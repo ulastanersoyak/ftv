@@ -60,7 +60,7 @@ file::size () const noexcept
 }
 
 [[nodiscard]] std::error_code
-write (const file &f, const std::filesystem::path &path)
+write (std::span<const std::byte> data, const std::filesystem::path &path)
 {
   if (std::filesystem::exists (path))
     {
@@ -71,11 +71,12 @@ write (const file &f, const std::filesystem::path &path)
       return make_error_code (std::errc::invalid_argument);
     }
   std::ofstream file_stream (path, std::ios::binary);
+
   if (!file_stream.is_open ())
     {
       return std::make_error_code (std::errc::no_such_file_or_directory);
     }
-  const auto data = f.data ();
+
   file_stream.write (reinterpret_cast<const char *> (data.data ()),
                      static_cast<std::streamsize> (data.size ()));
 
@@ -85,6 +86,13 @@ write (const file &f, const std::filesystem::path &path)
     }
 
   return {};
+}
+
+[[nodiscard]] std::error_code
+write (const file &f, const std::filesystem::path &path)
+{
+  const auto data = f.data ();
+  return write (data, path);
 }
 
 [[nodiscard]] std::error_code

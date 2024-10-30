@@ -27,6 +27,9 @@ private:
 [[nodiscard]] std::error_code write (const file &f,
                                      const std::filesystem::path &path);
 
+[[nodiscard]] std::error_code write (std::span<const std::byte> data,
+                                     const std::filesystem::path &path);
+
 [[nodiscard]] std::error_code write (const file &f);
 
 [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
