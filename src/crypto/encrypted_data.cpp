@@ -54,14 +54,6 @@ encrypted_data::encrypted_data (std::vector<std::byte> ciphertext,
 {
 }
 
-encrypted_data::encrypted_data (std::vector<std::byte> &&ciphertext,
-                                std::vector<std::byte> &&init_vec,
-                                std::vector<std::byte> &&tag)
-    : ciphertext_ (std::move (ciphertext)), init_vec_ (std::move (init_vec)),
-      tag_ (std::move (tag))
-{
-}
-
 [[nodiscard]] std::expected<file, std::error_code>
 encrypted_data::to_file (const std::filesystem::path &path) const noexcept
 {

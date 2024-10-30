@@ -1,8 +1,7 @@
-#include "crypto/decrypt.hpp"
 #include "crypto/encrypt.hpp"
-#include "crypto/encrypted_data.hpp"
 #include "crypto/serialize.hpp"
 #include "file/file.hpp"
+#include "video/video.hpp"
 
 int
 main ()
@@ -18,16 +17,16 @@ main ()
       return 1;
     }
 
-  const auto enc_file
-      = encrypted->to_file ("/home/retro/ftv/test/text_encrypted");
+  const auto serialized = ftv::serialize_encrypted_data (*encrypted);
 
-  const auto err = ftv::write (*enc_file);
+  if (!serialized)
+    {
+      return 1;
+    }
 
-  ftv::encrypted_data enc_data{ enc_file->path () };
-  const auto dec_file = ftv::decrypt (enc_data, key);
-
-  const auto err1
-      = ftv::write (*dec_file, "/home/retro/ftv/test/text_decrypted");
+  ftv::video video{ f, key };
+  const auto x = video.test ();
+  cv::imwrite ("metadata_frame.bmp", x); // BMP for lossless
 
   return 0;
 }

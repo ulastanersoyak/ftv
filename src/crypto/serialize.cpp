@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <utility>
 
 namespace ftv
 {
@@ -123,8 +124,8 @@ deserialize_encrypted_data (
                                              + static_cast<ssize_t> (offset),
                                          serialized_data.end ());
 
-      return std::expected<encrypted_data, std::error_code> (encrypted_data{
-          std::move (ciphertext), std::move (init_vec), std::move (tag) });
+      return std::expected<encrypted_data, std::error_code>{ encrypted_data (
+          std::move (ciphertext), std::move (init_vec), std::move (tag)) };
     }
   catch (const std::exception &)
     {

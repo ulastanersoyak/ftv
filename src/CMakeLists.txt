@@ -1,5 +1,8 @@
 find_package(OpenSSL REQUIRED)
 
+find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS})
+
 file(
   GLOB DIRS
   LIST_DIRECTORIES true
@@ -17,7 +20,10 @@ foreach(DIR ${DIRS})
 endforeach()
 
 add_library(ftv_lib STATIC ${ALL_SOURCES})
-target_link_libraries(ftv_lib PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+
+target_link_libraries(ftv_lib PUBLIC OpenSSL::SSL OpenSSL::Crypto
+                                     ${OpenCV_LIBS})
+
 target_include_directories(ftv_lib PUBLIC "${CMAKE_SOURCE_DIR}/includes")
 
 add_executable(ftv main.cpp)
