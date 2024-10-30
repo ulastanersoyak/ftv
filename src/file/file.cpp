@@ -59,12 +59,17 @@ write (const file &f, const std::filesystem::path &path)
 {
   if (std::filesystem::exists (path))
     {
-      return std::make_error_code (std::errc::file_exists);
+      return std::error_code (std::make_error_code (std::errc::file_exists));
+    }
+  if (path.empty ())
+    {
+      return std::error_code (make_error_code (std::errc::invalid_argument));
     }
   std::ofstream file_stream (path, std::ios::binary);
   if (!file_stream.is_open ())
     {
-      return std::make_error_code (std::errc::no_such_file_or_directory);
+      return std::error_code (
+          std::make_error_code (std::errc::no_such_file_or_directory));
     }
   const auto data = f.data ();
   file_stream.write (reinterpret_cast<const char *> (data.data ()),
@@ -72,7 +77,7 @@ write (const file &f, const std::filesystem::path &path)
 
   if (!file_stream)
     {
-      return std::make_error_code (std::errc::io_error);
+      return std::error_code (std::make_error_code (std::errc::io_error));
     }
 
   return {};
@@ -89,22 +94,24 @@ read (const std::filesystem::path &path) noexcept
 {
   if (!std::filesystem::exists (path))
     {
-      return std::unexpected (
-          std::make_error_code (std::errc::no_such_file_or_directory));
+      return std::expected<std::vector<std::byte>, std::error_code> (
+          std::unexpected (
+              std::make_error_code (std::errc::no_such_file_or_directory)));
     }
 
   std::ifstream file_stream (path, std::ios::binary);
   if (!file_stream.is_open ())
     {
-      return std::unexpected (std::make_error_code (std::errc::io_error));
+      return std::expected<std::vector<std::byte>, std::error_code> (
+          std::unexpected (std::make_error_code (std::errc::io_error)));
     }
 
   auto file_size = std::filesystem::file_size (path);
 
   if (file_size > std::numeric_limits<std::size_t>::max ())
     {
-      return std::unexpected (
-          std::make_error_code (std::errc::file_too_large));
+      return std::expected<std::vector<std::byte>, std::error_code> (
+          std::unexpected (std::make_error_code (std::errc::file_too_large)));
     }
 
   std::vector<std::byte> data (file_size);
@@ -113,9 +120,12 @@ read (const std::filesystem::path &path) noexcept
 
   if (!file_stream)
     {
-      return std::unexpected (std::make_error_code (std::errc::io_error));
+      return std::expected<std::vector<std::byte>, std::error_code> (
+          std::unexpected (std::make_error_code (std::errc::io_error)));
     }
-  return data;
+
+  return std::expected<std::vector<std::byte>, std::error_code> (
+      std::move (data));
 }
 
 } // namsepace ftv

@@ -1,12 +1,24 @@
 find_package(OpenSSL REQUIRED)
 
-add_library(ftv_lib file/file.cpp crypto/encrypt.cpp)
+file(
+  GLOB DIRS
+  LIST_DIRECTORIES true
+  "${CMAKE_CURRENT_SOURCE_DIR}/*")
 
-target_include_directories(ftv_lib PRIVATE ${CMAKE_SOURCE_DIR}/includes)
+set(ALL_SOURCES)
 
-target_link_libraries(ftv_lib PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+foreach(DIR ${DIRS})
+  if(IS_DIRECTORY ${DIR})
+    file(GLOB_RECURSE SOURCES "${DIR}/*.cpp")
+    list(APPEND ALL_SOURCES ${SOURCES})
+    message(STATUS "found sources in: ${DIR}")
+    message(STATUS "files: ${SOURCES}")
+  endif()
+endforeach()
+
+add_library(ftv_lib STATIC ${ALL_SOURCES})
+target_link_libraries(ftv_lib PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+target_include_directories(ftv_lib PUBLIC "${CMAKE_SOURCE_DIR}/includes")
 
 add_executable(ftv main.cpp)
-
 target_link_libraries(ftv PRIVATE ftv_lib)
-target_include_directories(ftv PRIVATE ${CMAKE_SOURCE_DIR}/includes)
