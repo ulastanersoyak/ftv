@@ -6,6 +6,7 @@
 #include "opencv2/core/core.hpp"
 #include "video/video_error.hpp"
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -57,6 +58,12 @@ video::video (const file &file, const secure_key &key, resolution res,
   frames_.emplace_back (static_cast<int32_t> (this->res_.y),
                         static_cast<int32_t> (this->res_.x), CV_8UC4);
   this->init_metadata_frame ();
+
+  for (const auto &byte : this->data_)
+    {
+      set_byte (byte);
+      advance_frame_position ();
+    }
 }
 
 [[nodiscard]] std::size_t
@@ -94,50 +101,51 @@ video::frame_pos () const noexcept
 {
   return this->frame_pos_;
 }
+
 [[nodiscard]] std::error_code
 video::write (const std::filesystem::path &path) const noexcept
 {
-  try
+
+  auto video_path = path;
+  if (video_path.extension () != ".mp4")
     {
-      auto video_path = path;
-      if (video_path.extension () != ".mp4")
-        {
-          video_path += ".mp4";
-        }
-
-      if (std::filesystem::exists (video_path))
-        {
-          return std::make_error_code (std::errc::file_exists);
-        }
-
-      std::string pipeline
-          = "appsrc ! videoconvert ! x264enc ! mp4mux ! filesink location="
-            + video_path.string ();
-
-      cv::VideoWriter video_writer (
-          pipeline, 0, static_cast<double> (this->fps_),
-          cv::Size (static_cast<std::int32_t> (this->res_.x),
-                    static_cast<std::int32_t> (this->res_.y)),
-          true);
-
-      if (!video_writer.isOpened ())
-        {
-          return std::make_error_code (std::errc::io_error);
-        }
-
-      for (const auto &frame : this->frames_)
-        {
-          cv::Mat rgb_frame (frame.rows, frame.cols, CV_8UC3, frame.data);
-          video_writer.write (rgb_frame);
-        }
-
-      video_writer.release ();
-      return {};
+      video_path += ".mp4";
     }
-  catch (...)
+
+  if (std::filesystem::exists (video_path))
+    {
+      return std::make_error_code (std::errc::file_exists);
+    }
+
+  auto temp_dir = std::filesystem::temp_directory_path () / "ftv_temp";
+  std::filesystem::create_directory (temp_dir);
+
+  for (size_t i = 0; i < this->frames_.size (); ++i)
+    {
+      std::string frame_path
+          = (temp_dir / ("frame_" + std::to_string (i) + ".png")).string ();
+      cv::imwrite (frame_path, this->frames_[i]);
+    }
+
+  std::string cmd = "ffmpeg -framerate " + std::to_string (this->fps_) + " -i "
+                    + (temp_dir / "frame_%d.png").string ()
+                    + " -c:v libx264 -pix_fmt yuv420p -crf 23 "
+                    + video_path.string ();
+
+  int ret = std::system (cmd.c_str ());
+
+  if (ret != 0)
     {
       return std::make_error_code (std::errc::io_error);
     }
+
+  // verify the file was created and has non-zero size
+  if (!std::filesystem::exists (video_path)
+      || std::filesystem::file_size (video_path) == 0)
+    {
+      return std::make_error_code (std::errc::io_error);
+    }
+  return {};
 }
 
 void
@@ -215,7 +223,7 @@ video::advance_frame_position () noexcept
         {
           this->frames_.emplace_back (static_cast<int32_t> (this->res_.y),
                                       static_cast<int32_t> (this->res_.x),
-                                      CV_8UC4);
+                                      CV_8UC4, cv::Scalar (0, 0, 0, 0));
         }
     }
   else

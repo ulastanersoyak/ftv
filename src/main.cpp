@@ -3,6 +3,8 @@
 #include "file/file.hpp"
 #include "video/video.hpp"
 
+#include <print>
+
 int
 main ()
 {
@@ -24,11 +26,11 @@ main ()
       return 1;
     }
 
-  ftv::video video{ f, key, { 10, 10 } };
+  ftv::video video{ f, key, { 1280, 720 }, 1 };
 
-  if (!video.write ("test"))
+  if (video.write ("test").value () != 0)
     {
-      return 1;
+      std::println ("error");
     }
   return 0;
 }
