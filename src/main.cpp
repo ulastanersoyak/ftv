@@ -24,9 +24,11 @@ main ()
       return 1;
     }
 
-  ftv::video video{ f, key };
-  const auto x = video.test ();
-  cv::imwrite ("metadata_frame.bmp", x); // BMP for lossless
+  ftv::video video{ f, key, { 10, 10 } };
 
+  if (!video.write ("test"))
+    {
+      return 1;
+    }
   return 0;
 }
