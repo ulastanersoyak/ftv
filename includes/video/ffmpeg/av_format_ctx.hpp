@@ -14,6 +14,7 @@ namespace ftv
 class av_format_ctx
 {
 public:
+  av_format_ctx () = default;
   av_format_ctx (const std::filesystem::path &path);
   ~av_format_ctx ();
 

@@ -1,4 +1,4 @@
-#include "video/av_packet.hpp"
+#include "video/ffmpeg/av_packet.hpp"
 #include <stdexcept>
 
 namespace ftv
@@ -59,6 +59,17 @@ av_packet::operator AVPacket * () noexcept { return this->packet_; }
 av_packet::operator const AVPacket * () const noexcept
 {
   return this->packet_;
+}
+
+[[nodiscard]] std::error_code
+av_packet::unref () noexcept
+{
+  if (!this->packet_)
+    {
+      return std::make_error_code (std::errc::invalid_argument);
+    }
+  av_packet_unref (this->packet_);
+  return {};
 }
 
 } // namespace ftv

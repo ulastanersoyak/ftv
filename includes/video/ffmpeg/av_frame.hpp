@@ -14,6 +14,7 @@ namespace ftv
 class av_frame
 {
 public:
+  av_frame () = default;
   av_frame (const resolution &res);
   ~av_frame ();
 

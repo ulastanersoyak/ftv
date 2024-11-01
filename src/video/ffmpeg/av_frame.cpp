@@ -1,4 +1,4 @@
-#include "video/av_frame.hpp"
+#include "video/ffmpeg/av_frame.hpp"
 
 #include <cstdint>
 #include <stdexcept>
@@ -10,7 +10,7 @@ av_frame::av_frame (const resolution &res) : frame_ (av_frame_alloc ())
 {
   this->frame_->width = static_cast<std::int32_t> (res.x);
   this->frame_->height = static_cast<std::int32_t> (res.y);
-  this->frame_->format = AV_PIX_FMT_RGBA;
+  this->frame_->format = AV_PIX_FMT_YUV420P;
 
   std::int32_t ret = av_frame_get_buffer (this->frame_, 0);
   if (ret < 0)

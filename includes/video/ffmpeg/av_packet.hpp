@@ -28,7 +28,7 @@ public:
   operator AVPacket * () noexcept;
   operator const AVPacket * () const noexcept;
 
-  [[nodiscard]] std::error_code reset () const noexcept;
+  [[nodiscard]] std::error_code unref () noexcept;
 
 private:
   AVPacket *packet_{ nullptr };
