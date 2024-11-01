@@ -1,6 +1,5 @@
 #include "video/av_frame.hpp"
 
-#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 

@@ -10,6 +10,7 @@ namespace ftv
 
 class av_codec_ctx
 {
+public:
   av_codec_ctx (AVCodecID id);
   ~av_codec_ctx ();
 
