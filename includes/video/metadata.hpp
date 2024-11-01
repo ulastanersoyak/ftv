@@ -1,5 +1,7 @@
 #pragma once
 
+#include "video/resolution.hpp"
+
 #include <cstddef>
 #include <string>
 
@@ -12,8 +14,7 @@ struct metadata
   std::size_t filesize{};
   std::size_t checksum{};
   std::size_t fps{};
-  std::size_t width{};
-  std::size_t height{};
+  resolution res{};
 };
 
 } // namespace ftv

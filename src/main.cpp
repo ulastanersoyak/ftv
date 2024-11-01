@@ -1,7 +1,8 @@
 #include "crypto/encrypt.hpp"
 #include "crypto/serialize.hpp"
 #include "file/file.hpp"
-#include "video/video.hpp"
+#include "video/av_frame.hpp"
+#include "video/pixel.hpp"
 
 #include <print>
 
@@ -26,11 +27,7 @@ main ()
       return 1;
     }
 
-  ftv::video video{ f, key, { 1280, 720 }, 1 };
+  ftv::av_frame frame{ { 1000, 1000 } };
 
-  if (video.write ("test").value () != 0)
-    {
-      std::println ("error");
-    }
   return 0;
 }
