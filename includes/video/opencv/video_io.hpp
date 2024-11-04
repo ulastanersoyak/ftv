@@ -1,6 +1,8 @@
 #include "video/resolution.hpp"
+
 #include <filesystem>
 #include <format>
+
 #include <opencv2/opencv.hpp>
 
 namespace ftv
@@ -85,8 +87,8 @@ public:
   video_io &operator= (const video_io &) = delete;
 
 private:
-  T io_;
-  std::filesystem::path path_;
+  T io_{};
+  std::filesystem::path path_{};
 };
 
 using video_reader = video_io<cv::VideoCapture>;
