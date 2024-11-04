@@ -5,8 +5,8 @@ if(NOT DEFINED CMAKE_CXX_STANDARD)
 endif()
 
 project(
-  project_name
-  VERSION 0.0.0
+  ftv
+  VERSION 1.0.0
   LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -17,7 +17,7 @@ add_compile_options(
   -Wall
   -Wextra
   -Wpedantic
-  # -Werror
+  -Werror
   -Wunused
   -Wuninitialized
   -Wshadow

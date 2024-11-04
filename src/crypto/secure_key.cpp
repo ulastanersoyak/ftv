@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <format>
-#include <iterator>
 #include <stdexcept>
 
 namespace ftv
@@ -15,17 +14,10 @@ secure_key::secure_key (std::string_view key)
       throw std::invalid_argument (std::format (
           "key size must be less than or equal to 32 characters"));
     }
+  key_.resize (32, std::byte{ 0 });
 
-  key_.reserve (32);
-
-  std::ranges::transform (key, std::back_inserter (this->key_),
+  std::ranges::transform (key, key_.begin (),
                           [] (char c) { return std::byte (c); });
-
-  // pad with zeros up to 32 bytes if needed
-  if (key.size () < 32)
-    {
-      key_.resize (32, std::byte{ 0 });
-    }
 }
 
 secure_key::~secure_key () { std::ranges::fill (this->key_, std::byte{ 0 }); }

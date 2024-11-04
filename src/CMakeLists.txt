@@ -38,3 +38,7 @@ target_include_directories(ftv_lib PUBLIC "${CMAKE_SOURCE_DIR}/includes"
 
 add_executable(ftv main.cpp)
 target_link_libraries(ftv PRIVATE ftv_lib)
+set_target_properties(ftv PROPERTIES LINK_FLAGS
+                                     "-static-libgcc -static-libstdc++")
+
+install(TARGETS ftv DESTINATION bin)
