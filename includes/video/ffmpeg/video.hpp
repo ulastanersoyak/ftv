@@ -32,6 +32,7 @@ private:
   av_format_ctx format_ctx_{};
   av_packet packet_{};
 
+  std::filesystem::path path{};
   metadata metadata_{};
 };
 

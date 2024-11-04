@@ -1,7 +1,9 @@
 #include "video/metadata.hpp"
+#include "video/pixel.hpp"
 #include <cstddef>
 #include <cstring>
 #include <format>
+#include <opencv2/videoio.hpp>
 #include <stdexcept>
 #include <vector>
 
@@ -10,74 +12,58 @@ namespace ftv
 
 metadata::metadata (std::span<const std::byte> bytes)
 {
-  std::size_t pos = 0;
-
-  if (bytes.size () < sizeof (this->filename_size_))
+  // check if there is  enough bytes to at least read the filename_size
+  if (bytes.size () < sizeof (std::size_t))
     {
       throw std::runtime_error (
           std::format ("invalid metadata bytes: expected at least {} bytes "
                        "for filename_size",
-                       sizeof (this->filename_size_)));
+                       sizeof (std::size_t)));
     }
-  std::memcpy (&this->filename_size_, bytes.data () + pos,
-               sizeof (this->filename_size_));
-  pos += sizeof (this->filename_size_);
 
-  if (bytes.size () < pos + this->filename_size_)
+  std::size_t pos = 0;
+
+  // read filename_size first
+  std::memcpy (&this->filename_size_, bytes.data () + pos,
+               sizeof (std::size_t));
+  pos += sizeof (std::size_t);
+
+  const std::size_t required_size = sizeof (std::size_t) + // filename_size
+                                    this->filename_size_ + // filename
+                                    sizeof (std::size_t) + // file_size
+                                    sizeof (std::size_t) + // checksum
+                                    sizeof (std::size_t) + // fps
+                                    sizeof (resolution);   // resolution
+
+  // check if there is  enough bytes for everything
+  if (bytes.size () < required_size)
     {
-      throw std::runtime_error (std::format (
-          "invalid metadata bytes: expected {} bytes for filename, got {}",
-          this->filename_size_, bytes.size () - pos));
+      throw std::runtime_error (
+          std::format ("invalid metadata bytes: expected {} bytes, got {}",
+                       required_size, bytes.size ()));
     }
+
   this->filename_.resize (this->filename_size_);
   std::memcpy (this->filename_.data (), bytes.data () + pos,
                this->filename_size_);
   pos += this->filename_size_;
 
-  if (bytes.size () < pos + sizeof (this->file_size_))
-    {
-      throw std::runtime_error (std::format (
-          "invalid metadata bytes: expected {} bytes for file_size, got {}",
-          sizeof (this->file_size_), bytes.size () - pos));
-    }
-  std::memcpy (&this->file_size_, bytes.data () + pos,
-               sizeof (this->file_size_));
-  pos += sizeof (this->file_size_);
+  std::memcpy (&this->file_size_, bytes.data () + pos, sizeof (std::size_t));
+  pos += sizeof (std::size_t);
 
-  if (bytes.size () < pos + sizeof (this->checksum_))
-    {
-      throw std::runtime_error (std::format (
-          "invalid metadata bytes: expected {} bytes for checksum, got {}",
-          sizeof (this->checksum_), bytes.size () - pos));
-    }
-  std::memcpy (&this->checksum_, bytes.data () + pos,
-               sizeof (this->checksum_));
-  pos += sizeof (this->checksum_);
+  std::memcpy (&this->checksum_, bytes.data () + pos, sizeof (std::size_t));
+  pos += sizeof (std::size_t);
 
-  if (bytes.size () < pos + sizeof (this->fps_))
-    {
-      throw std::runtime_error (std::format (
-          "invalid metadata bytes: expected {} bytes for fps, got {}",
-          sizeof (this->fps_), bytes.size () - pos));
-    }
-  std::memcpy (&this->fps_, bytes.data () + pos, sizeof (this->fps_));
-  pos += sizeof (this->fps_);
+  std::memcpy (&this->fps_, bytes.data () + pos, sizeof (std::size_t));
+  pos += sizeof (std::size_t);
 
-  if (bytes.size () < pos + sizeof (this->res_))
-    {
-      throw std::runtime_error (
-          std::format ("invalid metadata bytes: expected {} bytes for "
-                       "resolution, got {}",
-                       sizeof (this->res_), bytes.size () - pos));
-    }
-  std::memcpy (&this->res_, bytes.data () + pos, sizeof (this->res_));
+  std::memcpy (&this->res_, bytes.data () + pos, sizeof (resolution));
 }
 
 metadata::metadata (std::string fname, std::size_t fsize, std::size_t checksum,
                     std::size_t fps, const resolution &r)
     : filename_size_ (fname.size ()), filename_ (std::move (fname)),
-      file_size_ (fsize + this->size ()), checksum_ (checksum), fps_ (fps),
-      res_ (r)
+      file_size_ (fsize), checksum_ (checksum), fps_ (fps), res_ (r)
 {
   if (this->filename_.empty ())
     {
@@ -103,7 +89,6 @@ metadata::filename_size () const noexcept
 [[nodiscard]] std::string
 metadata::filename () const noexcept
 {
-
   return this->filename_;
 }
 

@@ -1,7 +1,7 @@
 #include "crypto/encrypt.hpp"
 #include "crypto/serialize.hpp"
 #include "video/metadata.hpp"
-#include "video/video.hpp"
+#include "video/opencv/video.hpp"
 
 #include <print>
 #include <string_view>
@@ -28,9 +28,11 @@ main ()
       return 1;
     }
 
-  ftv::metadata metadata{ fname, serialized->size (), 100, 30, { 100, 100 } };
+  ftv::metadata data{ fname, serialized->size (), 100, 5, { 300, 300 } };
+  ftv::video vid{ "test.avi", data };
+  vid.write (*serialized);
 
-  ftv::video vid{ "test.mp4", *serialized, metadata };
+  ftv::video vid1{ "test.avi" };
 
   return 0;
 }

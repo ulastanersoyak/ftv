@@ -37,13 +37,8 @@ add_compile_options(
   -Wsuggest-final-methods
   -Wsuggest-final-types
   -Wnon-virtual-dtor
-  -Wctor-dtor-privacy)
-
-if(CMAKE_COMPILER_IS_GNUCXX)
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL 14.1.1)
-    add_compile_options(-Wnrvo)
-  endif()
-endif()
+  -Wctor-dtor-privacy
+  -Wnrvo)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(

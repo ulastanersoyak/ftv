@@ -11,10 +11,10 @@ extern "C"
 namespace ftv
 {
 
-video::video (const std::filesystem::path &path,
+video::video (const std::filesystem::path &path_,
               std::span<const std::byte> bytes, const metadata &meta)
     : codec_ctx_ (AV_CODEC_ID_H264), frame_ (meta.res ()),
-      format_ctx_ (path.string ()), packet_ (), metadata_ (meta)
+      format_ctx_ (path_.string ()), packet_ (), metadata_ (meta)
 {
   // configure codec parameters
   auto *ctx = this->codec_ctx_.get ();
@@ -22,7 +22,7 @@ video::video (const std::filesystem::path &path,
   ctx->height = static_cast<std::int32_t> (meta.res ().y);
   ctx->time_base = { 1, static_cast<int> (meta.fps ()) };
   ctx->framerate = { static_cast<int> (meta.fps ()), 1 };
-  ctx->pix_fmt = AV_PIX_FMT_RGBA;
+  ctx->pix_fmt = AV_PIX_FMT_RGB24;
 
   const AVCodec *codec = avcodec_find_encoder (AV_CODEC_ID_H264);
   if (std::int32_t ret = avcodec_open2 (ctx, codec, nullptr); ret < 0)
@@ -66,7 +66,7 @@ video::video (const std::filesystem::path &path,
   all_bytes.insert (all_bytes.end (), meta_bytes.begin (), meta_bytes.end ());
   all_bytes.insert (all_bytes.end (), bytes.begin (), bytes.end ());
 
-  const size_t bytes_per_pixel = 4; // RGBA
+  const size_t bytes_per_pixel = 4; // RGB24
   const size_t row_bytes
       = static_cast<std::size_t> (ctx->width) * bytes_per_pixel;
 

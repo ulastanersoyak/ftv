@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <expected>
+#include <filesystem>
 #include <span>
 #include <string>
 #include <vector>
@@ -19,6 +20,7 @@ public:
   explicit metadata (std::span<const std::byte>);
   metadata (std::string fname, std::size_t fsize, std::size_t checksum,
             std::size_t fps, const resolution &res);
+  explicit metadata (const std::filesystem::path &video_path);
 
   [[nodiscard]] std::size_t filename_size () const noexcept;
   [[nodiscard]] std::string filename () const noexcept;
@@ -41,12 +43,12 @@ public:
   [[nodiscard]] std::vector<std::byte> to_vec () const noexcept;
 
 private:
-  std::size_t filename_size_{};
-  std::string filename_{};
-  std::size_t file_size_{};
-  std::size_t checksum_{};
-  std::size_t fps_{};
-  resolution res_{};
+  std::size_t filename_size_{ 0 };
+  std::string filename_{ 0 };
+  std::size_t file_size_{ 0 };
+  std::size_t checksum_{ 0 };
+  std::size_t fps_{ 0 };
+  resolution res_{ 0 };
 };
 
 } // namespace ftv

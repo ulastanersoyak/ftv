@@ -1,75 +1,55 @@
 #include <video/pixel.hpp>
 
+#include <cstdlib>
+
 namespace ftv
 {
-std::vector<pixel>
+
+[[nodiscard]] std::vector<pixel>
 bytes_to_pixels (std::span<const std::byte> bytes) noexcept
 {
-  std::vector<pixel> pixels (bytes.size () * 2);
-  for (size_t i = 0; i < bytes.size (); ++i)
+  std::vector<pixel> pixels;
+  pixels.reserve (bytes.size () * 8); // Each byte becomes 8 pixels
+  for (const auto &byte : bytes)
     {
-      const std::byte &byte = bytes[i];
-
-      // first pixel from high nibble
-      pixels.at (i * 2) = {
-        static_cast<uint8_t> (
-            std::to_integer<uint8_t> (byte & std::byte{ 0x80 }) != 0 ? 255
-                                                                     : 0),
-        static_cast<uint8_t> (
-            std::to_integer<uint8_t> (byte & std::byte{ 0x40 }) != 0 ? 255
-                                                                     : 0),
-        static_cast<uint8_t> (
-            std::to_integer<uint8_t> (byte & std::byte{ 0x20 }) != 0 ? 255
-                                                                     : 0),
-        static_cast<uint8_t> (
-            std::to_integer<uint8_t> (byte & std::byte{ 0x10 }) != 0 ? 255 : 0)
-      };
-
-      // second pixel from low nibble
-      pixels.at (i * 2 + 1) = {
-        static_cast<uint8_t> (
-            std::to_integer<uint8_t> (byte & std::byte{ 0x08 }) != 0 ? 255
-                                                                     : 0),
-        static_cast<uint8_t> (
-            std::to_integer<uint8_t> (byte & std::byte{ 0x04 }) != 0 ? 255
-                                                                     : 0),
-        static_cast<uint8_t> (
-            std::to_integer<uint8_t> (byte & std::byte{ 0x02 }) != 0 ? 255
-                                                                     : 0),
-        static_cast<uint8_t> (
-            std::to_integer<uint8_t> (byte & std::byte{ 0x01 }) != 0 ? 255 : 0)
-      };
+      const auto value = std::to_integer<std::uint8_t> (byte);
+      // Convert each bit to a pixel
+      for (int bit = 7; bit >= 0; --bit) // MSB first
+        {
+          uint8_t pixel_val
+              = ((value >> bit) & 1) ? 255 : 0; // White for 1, black for 0
+          pixels.push_back ({
+              pixel_val, // R
+              pixel_val, // G
+              pixel_val  // B
+          });
+        }
     }
   return pixels;
 }
 
-std::vector<std::byte>
+[[nodiscard]] std::vector<std::byte>
 pixels_to_bytes (std::span<const pixel> pixels) noexcept
 {
-  std::vector<std::byte> bytes (pixels.size () / 2);
+  std::vector<std::byte> bytes;
+  bytes.reserve ((pixels.size () + 7) / 8); // Round up division
 
-  for (std::size_t i = 0; i < bytes.size (); ++i)
+  for (size_t i = 0; i < pixels.size (); i += 8)
     {
-      const auto &first = pixels[i * 2];
-      const auto &second = pixels[i * 2 + 1];
-
-      uint8_t byte_value = 0;
-
-      // high nibble from first pixel
-      byte_value |= (first.r != 0 ? 0x80 : 0);
-      byte_value |= (first.g != 0 ? 0x40 : 0);
-      byte_value |= (first.b != 0 ? 0x20 : 0);
-      byte_value |= (first.a != 0 ? 0x10 : 0);
-
-      // low nibble from second pixel
-      byte_value |= (second.r != 0 ? 0x08 : 0);
-      byte_value |= (second.g != 0 ? 0x04 : 0);
-      byte_value |= (second.b != 0 ? 0x02 : 0);
-      byte_value |= (second.a != 0 ? 0x01 : 0);
-
-      bytes.at (i) = std::byte{ byte_value };
+      uint8_t byte_val = 0;
+      // Reconstruct byte from 8 pixels
+      for (size_t bit = 0; bit < 8 && (i + bit) < pixels.size (); ++bit)
+        {
+          // Consider pixel white (1) if any channel is closer to 255 than to 0
+          if ((pixels[i + bit].r > 127) || (pixels[i + bit].g > 127)
+              || (pixels[i + bit].b > 127))
+            {
+              byte_val |= (1 << (7 - bit)); // MSB first
+            }
+        }
+      bytes.push_back (std::byte (byte_val));
     }
-
   return bytes;
 }
+
 } // namespace ftv
