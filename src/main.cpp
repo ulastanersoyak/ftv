@@ -3,8 +3,8 @@
 #include "crypto/encrypt.hpp"
 #include "crypto/serialize.hpp"
 #include "video/metadata.hpp"
-#include "video/opencv/video.hpp"
 #include "video/pixel.hpp"
+#include "video/video.hpp"
 
 #include <filesystem>
 #include <print>

@@ -40,18 +40,6 @@ add_compile_options(
   -Wctor-dtor-privacy
   -Wnrvo)
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(
-    -Wweak-vtables
-    -Wglobal-constructors
-    -Wexit-time-destructors
-    -Wused-but-marked-unused
-    -Wcovered-switch-default
-    -Wmissing-prototypes
-    -Woverloaded-virtual
-    -Wdelete-non-virtual-dtor)
-endif()
-
 set(CMAKE_BUILD_TYPE Debug)
 
 if(CMAKE_BUILD_TYPE STREQUAL Debug)

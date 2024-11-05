@@ -1,18 +1,10 @@
 find_package(OpenSSL REQUIRED)
-
 find_package(OpenCV REQUIRED)
-include_directories(${OpenCV_INCLUDE_DIRS})
-
+find_package(CURL REQUIRED)
+find_package(nlohmann_json REQUIRED)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(
-  FFMPEG
-  REQUIRED
-  IMPORTED_TARGET
-  libavcodec
-  libavformat
-  libavutil
-  libswscale
-  libswresample)
+
+include_directories(${OpenCV_INCLUDE_DIRS} ${CURL_INCLUDE_DIRS})
 
 file(
   GLOB DIRS
@@ -30,15 +22,14 @@ endforeach()
 
 add_library(ftv_lib STATIC ${ALL_SOURCES})
 
-target_link_libraries(ftv_lib PUBLIC OpenSSL::SSL OpenSSL::Crypto
-                                     PkgConfig::FFMPEG ${OpenCV_LIBS})
+target_link_libraries(
+  ftv_lib PUBLIC OpenSSL::SSL OpenSSL::Crypto ${OpenCV_LIBS} ${CURL_LIBRARIES}
+                 nlohmann_json::nlohmann_json)
 
-target_include_directories(ftv_lib PUBLIC "${CMAKE_SOURCE_DIR}/includes"
-                                          ${FFMPEG_INCLUDE_DIRS})
+target_include_directories(ftv_lib PUBLIC "${CMAKE_SOURCE_DIR}/includes")
 
 add_executable(ftv main.cpp)
 target_link_libraries(ftv PRIVATE ftv_lib)
 set_target_properties(ftv PROPERTIES LINK_FLAGS
                                      "-static-libgcc -static-libstdc++")
-
 install(TARGETS ftv DESTINATION bin)

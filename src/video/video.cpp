@@ -1,10 +1,10 @@
-#include <array>
 #include <cstddef>
-#include <opencv2/opencv.hpp>
-#include <video/opencv/video.hpp>
 
-#include "video/opencv/video_io.hpp"
 #include "video/pixel.hpp"
+#include "video/video.hpp"
+#include "video/video_io.hpp"
+
+#include <opencv2/opencv.hpp>
 
 namespace ftv
 {
