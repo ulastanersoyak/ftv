@@ -6,6 +6,6 @@
 namespace ftv
 {
 
-[[nodiscard]] std::size_t hash (std::span<std::byte> data);
+[[nodiscard]] std::size_t hash (std::span<const std::byte> data);
 
 } // namespace ftv

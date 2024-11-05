@@ -27,7 +27,8 @@ video::write (std::span<const pixel> pixels) const noexcept
       return std::make_error_code (std::errc::invalid_argument);
     }
 
-  if (pixels.size () > this->metadata_.res ().x * this->metadata_.res ().y)
+  if (this->metadata_.res ().x * this->metadata_.res ().y
+      > this->metadata_.res ().x * this->metadata_.res ().y)
     {
       return std::make_error_code (std::errc::value_too_large);
     }
