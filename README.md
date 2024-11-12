@@ -2,8 +2,8 @@
 
 - cmake (version 3.27 or higher)
 - c++ compiler with C++23 support
-- opencv
-- openssl
+- opencv (version 4.10 or higher)
+- openssl (version 3.4.0 or higher)
 
 ## building from source
 
@@ -21,7 +21,7 @@ cmake ..
 make
 ```
 
-3. (optonal) install systemwide:
+3. (optional) install systemwide:
 ```bash
 sudo make install
 ```
