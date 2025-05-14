@@ -1,10 +1,9 @@
-find_package(OpenSSL REQUIRED)
+# argon2id needs openssl 3.2
+find_package(OpenSSL 3.2 REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(CURL REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(PkgConfig REQUIRED)
-
-include_directories(${OpenCV_INCLUDE_DIRS} ${CURL_INCLUDE_DIRS})
 
 file(
   GLOB DIRS
@@ -26,7 +25,9 @@ target_link_libraries(
   ftv_lib PUBLIC OpenSSL::SSL OpenSSL::Crypto ${OpenCV_LIBS} ${CURL_LIBRARIES}
                  nlohmann_json::nlohmann_json)
 
-target_include_directories(ftv_lib PUBLIC "${CMAKE_SOURCE_DIR}/includes")
+target_include_directories(
+  ftv_lib PUBLIC "${CMAKE_SOURCE_DIR}/includes" ${OpenCV_INCLUDE_DIRS}
+                 ${CURL_INCLUDE_DIRS})
 
 add_executable(ftv main.cpp)
 target_link_libraries(ftv PRIVATE ftv_lib)

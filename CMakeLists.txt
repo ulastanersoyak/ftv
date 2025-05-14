@@ -13,6 +13,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# default to debug, but let -DCMAKE_BUILD_TYPE=Release override it
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE
+      Debug
+      CACHE STRING "build type" FORCE)
+endif()
+
 add_compile_options(
   -Wall
   -Wextra
@@ -22,32 +29,29 @@ add_compile_options(
   -Wuninitialized
   -Wshadow
   -Wconversion
-  -Wduplicated-cond
-  -Wduplicated-branches
-  -Wlogical-op
-  -Wuseless-cast
   -Wsign-conversion
   -Wfloat-equal
-  -Weffc++
   -Wold-style-cast
-  -Wvexing-parse
   -Wformat=2
   -Wvla
   -Wsuggest-override
-  -Wsuggest-final-methods
-  -Wsuggest-final-types
-  -Wnon-virtual-dtor
-  -Wctor-dtor-privacy
-  -Wnrvo)
+  -Wnon-virtual-dtor)
 
-set(CMAKE_BUILD_TYPE Debug)
-
-if(CMAKE_BUILD_TYPE STREQUAL Debug)
-  add_compile_options(-g)
-endif()
-
-if(CMAKE_BUILD_TYPE STREQUAL Release)
-  add_compile_options(-Ofast)
+# warnings only gcc knows about, clang would reject them under -Werror
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  add_compile_options(
+    -Wduplicated-cond
+    -Wduplicated-branches
+    -Wlogical-op
+    -Wuseless-cast
+    -Weffc++
+    -Wvexing-parse
+    -Wsuggest-final-methods
+    -Wsuggest-final-types
+    -Wctor-dtor-privacy)
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 14)
+    add_compile_options(-Wnrvo)
+  endif()
 endif()
 
 add_subdirectory(src)
