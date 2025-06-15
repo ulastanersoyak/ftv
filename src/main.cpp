@@ -21,10 +21,9 @@ namespace
 int
 run_encrypt (const ftv::parameters &params)
 {
-  const ftv::secure_key key{ params.key };
   const ftv::file input{ params.input_file };
 
-  const auto encrypted = ftv::encrypt (input, key, ftv::aes_256_gcm);
+  const auto encrypted = ftv::encrypt (input.data (), params.key);
   if (!encrypted)
     {
       std::println (stderr, "error encrypting {}: {}", params.input_file,
@@ -62,7 +61,6 @@ run_encrypt (const ftv::parameters &params)
 int
 run_decrypt (const ftv::parameters &params)
 {
-  const ftv::secure_key key{ params.key };
   ftv::video vid{ params.input_file };
 
   const auto pixels = vid.read ();
@@ -89,7 +87,7 @@ run_decrypt (const ftv::parameters &params)
       return 1;
     }
 
-  const auto decrypted = ftv::decrypt (*deserialized, key);
+  const auto decrypted = ftv::decrypt (*deserialized, params.key);
   if (!decrypted)
     {
       std::println (stderr, "error decrypting data: wrong key or corrupted "

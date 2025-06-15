@@ -1,3 +1,5 @@
+#pragma once
+
 #include "crypto/encrypted_data.hpp"
 
 #include <cstddef>
@@ -9,8 +11,9 @@
 namespace ftv
 {
 
-// serialized encrypted data:
-// [iv size (4 bytes)][iv data][tag size (4 bytes)][tag data][ciphertext]
+// serialized encrypted data, sizes are little-endian:
+// [salt size (4 bytes)][salt][iv size (4 bytes)][iv]
+// [tag size (4 bytes)][tag][ciphertext]
 
 [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
 serialize_encrypted_data (const encrypted_data &data) noexcept;

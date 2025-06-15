@@ -45,10 +45,6 @@ validate (const parameters &params)
     {
       return "key (-k) is required";
     }
-  if (params.key.size () > 32)
-    {
-      return "key must be at most 32 characters";
-    }
   if (params.width < MIN_DIMENSION || params.width > MAX_DIMENSION)
     {
       return std::format ("width must be between {} and {}", MIN_DIMENSION,
@@ -81,7 +77,7 @@ usage ()
       "  -o, --output <path>    where to write the result (required for "
       "encrypt,\n"
       "                         decrypt defaults to <name>_decrypted)\n"
-      "  -k, --key <key>        encryption/decryption key (max 32 chars)\n"
+      "  -k, --key <key>        encryption/decryption key\n"
       "  -w, --width <pixels>   video width ({0}-{1}, default: {2})\n"
       "  -H, --height <pixels>  video height ({0}-{1}, default: {3})\n"
       "  -f, --fps <number>     frames per second (1-{4}, default: {5})\n"

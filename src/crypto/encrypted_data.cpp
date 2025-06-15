@@ -17,9 +17,7 @@ encrypted_data::encrypted_data (const std::filesystem::path &path)
         {
           throw std::runtime_error ("Failed to deserialize data");
         }
-      ciphertext_ = std::move (deserialized->ciphertext ());
-      init_vec_ = std::move (deserialized->init_vec ());
-      tag_ = std::move (deserialized->tag ());
+      *this = std::move (*deserialized);
     }
   else
     {
@@ -48,9 +46,10 @@ encrypted_data::encrypted_data (const std::filesystem::path &path)
 
 encrypted_data::encrypted_data (std::vector<std::byte> ciphertext,
                                 std::vector<std::byte> init_vec,
-                                std::vector<std::byte> tag)
+                                std::vector<std::byte> tag,
+                                std::vector<std::byte> salt)
     : ciphertext_ (std::move (ciphertext)), init_vec_ (std::move (init_vec)),
-      tag_ (std::move (tag))
+      tag_ (std::move (tag)), salt_ (std::move (salt))
 {
 }
 
@@ -84,12 +83,22 @@ encrypted_data::tag () const noexcept
   return this->tag_;
 }
 
+[[nodiscard]] const std::vector<std::byte> &
+encrypted_data::salt () const noexcept
+{
+  return this->salt_;
+}
+
 std::error_code
 encrypted_data::save (const std::filesystem::path &path) const noexcept
 {
   try
     {
       const auto serialized_data = serialize_encrypted_data (*this);
+      if (!serialized_data)
+        {
+          return serialized_data.error ();
+        }
 
       std::ofstream file (path, std::ios::binary);
       if (!file)

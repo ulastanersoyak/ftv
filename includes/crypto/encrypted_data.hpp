@@ -16,7 +16,8 @@ public:
   explicit encrypted_data (const std::filesystem::path &path);
 
   encrypted_data (std::vector<std::byte> ciphertext,
-                  std::vector<std::byte> init_vec, std::vector<std::byte> tag);
+                  std::vector<std::byte> init_vec, std::vector<std::byte> tag,
+                  std::vector<std::byte> salt);
 
   [[nodiscard]] std::expected<file, std::error_code>
   to_file (const std::filesystem::path &path
@@ -26,6 +27,7 @@ public:
   [[nodiscard]] const std::vector<std::byte> &ciphertext () const noexcept;
   [[nodiscard]] const std::vector<std::byte> &init_vec () const noexcept;
   [[nodiscard]] const std::vector<std::byte> &tag () const noexcept;
+  [[nodiscard]] const std::vector<std::byte> &salt () const noexcept;
 
   std::error_code save (const std::filesystem::path &path) const noexcept;
 
@@ -33,6 +35,7 @@ private:
   std::vector<std::byte> ciphertext_{};
   std::vector<std::byte> init_vec_{}; // generated during encryption
   std::vector<std::byte> tag_{};      // generated during encryption
+  std::vector<std::byte> salt_{};     // key derivation salt
 };
 
 } // namespace ftv

@@ -1,64 +1,78 @@
 #include "crypto/serialize.hpp"
+#include "crypto/encrypt.hpp"
+#include "crypto/secure_key.hpp"
+#include "util/endian.hpp"
 
-#include <algorithm>
 #include <cstdint>
-#include <cstring>
+#include <optional>
 #include <utility>
 
 namespace ftv
 {
 
+namespace
+{
+
+void
+write_field (std::vector<std::byte> &out, std::span<const std::byte> field)
+{
+  put_le (out, static_cast<std::uint32_t> (field.size ()));
+  out.insert (out.end (), field.begin (), field.end ());
+}
+
+// reads a size-prefixed field that must be exactly expected_size bytes long
+std::optional<std::vector<std::byte>>
+read_field (std::span<const std::byte> data, std::size_t &offset,
+            std::size_t expected_size)
+{
+  if (data.size () - offset < sizeof (std::uint32_t))
+    {
+      return std::nullopt;
+    }
+  const auto size = get_le<std::uint32_t> (data, offset);
+  offset += sizeof (std::uint32_t);
+
+  if (size != expected_size || data.size () - offset < size)
+    {
+      return std::nullopt;
+    }
+  const auto field = data.subspan (offset, size);
+  offset += size;
+  return std::vector<std::byte> (field.begin (), field.end ());
+}
+
+} // namespace
+
 [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
 serialize_encrypted_data (const encrypted_data &data) noexcept
 {
-  if (data.init_vec ().empty () || data.tag ().empty ())
+  if (data.salt ().size () != SALT_SIZE
+      || data.init_vec ().size () != AES_GCM_IV_SIZE
+      || data.tag ().size () != AES_GCM_TAG_SIZE)
     {
-      return std::expected<std::vector<std::byte>, std::error_code> (
-          std::unexpected (
-              std::make_error_code (std::errc::invalid_argument)));
+      return std::unexpected (
+          std::make_error_code (std::errc::invalid_argument));
     }
 
   try
     {
-      const size_t total_size = 4 +                         // iv size field
-                                data.init_vec ().size () +  // iv data
-                                4 +                         // tag size field
-                                data.tag ().size () +       // tag data
-                                data.ciphertext ().size (); // ciphertext
-
       std::vector<std::byte> serialized{};
-      serialized.reserve (total_size);
+      serialized.reserve (3 * sizeof (std::uint32_t) + data.salt ().size ()
+                          + data.init_vec ().size () + data.tag ().size ()
+                          + data.ciphertext ().size ());
 
-      // add iv size
-      const auto iv_size
-          = static_cast<std::uint32_t> (data.init_vec ().size ());
-      std::ranges::copy (
-          std::span{ reinterpret_cast<const std::byte *> (&iv_size), 4 },
-          std::back_inserter (serialized));
+      write_field (serialized, data.salt ());
+      write_field (serialized, data.init_vec ());
+      write_field (serialized, data.tag ());
+      serialized.insert (serialized.end (), data.ciphertext ().begin (),
+                         data.ciphertext ().end ());
 
-      // add iv data
-      std::ranges::copy (data.init_vec (), std::back_inserter (serialized));
-
-      // add tag size
-      const auto tag_size = static_cast<std::uint32_t> (data.tag ().size ());
-      std::ranges::copy (
-          std::span{ reinterpret_cast<const std::byte *> (&tag_size), 4 },
-          std::back_inserter (serialized));
-
-      // add tag data
-      std::ranges::copy (data.tag (), std::back_inserter (serialized));
-
-      // add ciphertext
-      std::ranges::copy (data.ciphertext (), std::back_inserter (serialized));
-
-      return std::expected<std::vector<std::byte>, std::error_code> (
-          std::move (serialized));
+      return serialized;
     }
   catch (const std::exception &)
     {
-      return std::expected<std::vector<std::byte>, std::error_code> (
-          std::unexpected (
-              std::make_error_code (std::errc::not_enough_memory)));
+      return std::unexpected (
+          std::make_error_code (std::errc::not_enough_memory));
     }
 }
 
@@ -67,70 +81,29 @@ std::expected<encrypted_data, std::error_code>
 deserialize_encrypted_data (
     std::span<const std::byte> serialized_data) noexcept
 {
-  // need at least 8 bytes for the size fields
-  if (serialized_data.size () < 8)
-    {
-      return std::expected<encrypted_data, std::error_code> (std::unexpected (
-          std::make_error_code (std::errc::invalid_argument)));
-    }
-
   try
     {
-      size_t offset = 0;
-
-      // read iv size
-      std::uint32_t iv_size;
-      std::memcpy (&iv_size, serialized_data.data () + offset,
-                   sizeof (iv_size));
-      offset += sizeof (iv_size);
-
-      // validate iv size and remaining data
-      if (iv_size == 0
-          || serialized_data.size ()
-                 < offset + iv_size + sizeof (std::uint32_t))
+      std::size_t offset = 0;
+      auto salt = read_field (serialized_data, offset, SALT_SIZE);
+      auto init_vec = read_field (serialized_data, offset, AES_GCM_IV_SIZE);
+      auto tag = read_field (serialized_data, offset, AES_GCM_TAG_SIZE);
+      if (!salt || !init_vec || !tag)
         {
           return std::unexpected (
               std::make_error_code (std::errc::invalid_argument));
         }
 
-      // extract iv data
-      std::vector<std::byte> init_vec (
-          serialized_data.begin () + static_cast<ssize_t> (offset),
-          serialized_data.begin () + static_cast<ssize_t> (offset) + iv_size);
-      offset += iv_size;
+      // the remaining data is the ciphertext
+      const auto ciphertext = serialized_data.subspan (offset);
 
-      // read tag size
-      std::uint32_t tag_size;
-      std::memcpy (&tag_size, serialized_data.data () + offset,
-                   sizeof (tag_size));
-      offset += sizeof (tag_size);
-
-      // validate tag size and remaining data
-      if (tag_size == 0 || serialized_data.size () < offset + tag_size)
-        {
-          return std::expected<encrypted_data, std::error_code> (
-              std::unexpected (
-                  std::make_error_code (std::errc::invalid_argument)));
-        }
-
-      // extract tag data
-      std::vector<std::byte> tag (
-          serialized_data.begin () + static_cast<ssize_t> (offset),
-          serialized_data.begin () + static_cast<ssize_t> (offset) + tag_size);
-      offset += tag_size;
-
-      // extract remaining data as ciphertext
-      std::vector<std::byte> ciphertext (serialized_data.begin ()
-                                             + static_cast<ssize_t> (offset),
-                                         serialized_data.end ());
-
-      return std::expected<encrypted_data, std::error_code>{ encrypted_data (
-          std::move (ciphertext), std::move (init_vec), std::move (tag)) };
+      return encrypted_data (
+          std::vector<std::byte> (ciphertext.begin (), ciphertext.end ()),
+          std::move (*init_vec), std::move (*tag), std::move (*salt));
     }
   catch (const std::exception &)
     {
-      return std::expected<encrypted_data, std::error_code> (std::unexpected (
-          std::make_error_code (std::errc::not_enough_memory)));
+      return std::unexpected (
+          std::make_error_code (std::errc::not_enough_memory));
     }
 }
 
