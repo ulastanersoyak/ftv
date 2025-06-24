@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <expected>
 #include <filesystem>
+#include <span>
 #include <system_error>
 #include <vector>
 
@@ -35,4 +36,13 @@ private:
 [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
 read (const std::filesystem::path &path) noexcept;
 
-} // namsepace ftv
+// payload layout, sizes are little-endian:
+// [file name size (2 bytes)][file name][file contents]
+// only the file name is stored, never the directories leading to it
+[[nodiscard]] std::vector<std::byte> pack_file (const file &f);
+
+// rejects names that are not a plain file name, e.g. "../x" or "/etc/x"
+[[nodiscard]] std::expected<file, std::error_code>
+unpack_file (std::span<const std::byte> payload) noexcept;
+
+} // namespace ftv

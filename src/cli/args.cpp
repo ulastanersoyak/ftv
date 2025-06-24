@@ -76,7 +76,7 @@ usage ()
       "options:\n"
       "  -o, --output <path>    where to write the result (required for "
       "encrypt,\n"
-      "                         decrypt defaults to <name>_decrypted)\n"
+      "                         decrypt defaults to the original file name)\n"
       "  -k, --key <key>        encryption/decryption key\n"
       "  -w, --width <pixels>   video width ({0}-{1}, default: {2})\n"
       "  -H, --height <pixels>  video height ({0}-{1}, default: {3})\n"

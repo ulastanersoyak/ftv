@@ -1,6 +1,12 @@
 #include "file/file.hpp"
+#include "util/endian.hpp"
+
+#include <algorithm>
+#include <cstdint>
 #include <format>
 #include <fstream>
+#include <limits>
+#include <stdexcept>
 
 namespace ftv
 {
@@ -91,8 +97,7 @@ write (std::span<const std::byte> data, const std::filesystem::path &path)
 [[nodiscard]] std::error_code
 write (const file &f, const std::filesystem::path &path)
 {
-  const auto data = f.data ();
-  return write (data, path);
+  return write (f.data (), path);
 }
 
 [[nodiscard]] std::error_code
@@ -140,4 +145,69 @@ read (const std::filesystem::path &path) noexcept
       std::move (data));
 }
 
-} // namsepace ftv
+[[nodiscard]] std::vector<std::byte>
+pack_file (const file &f)
+{
+  const auto name = f.path ().filename ().string ();
+  if (name.empty ()
+      || name.size () > std::numeric_limits<std::uint16_t>::max ())
+    {
+      throw std::invalid_argument (
+          std::format ("invalid file name: {}", f.path ().string ()));
+    }
+
+  std::vector<std::byte> payload{};
+  payload.reserve (sizeof (std::uint16_t) + name.size () + f.size ());
+  put_le (payload, static_cast<std::uint16_t> (name.size ()));
+  std::ranges::transform (name, std::back_inserter (payload),
+                          [] (char c) { return static_cast<std::byte> (c); });
+  payload.insert (payload.end (), f.data ().begin (), f.data ().end ());
+  return payload;
+}
+
+[[nodiscard]] std::expected<file, std::error_code>
+unpack_file (std::span<const std::byte> payload) noexcept
+{
+  try
+    {
+      if (payload.size () < sizeof (std::uint16_t))
+        {
+          return std::unexpected (
+              std::make_error_code (std::errc::invalid_argument));
+        }
+      const std::size_t name_size = get_le<std::uint16_t> (payload, 0);
+      if (payload.size () - sizeof (std::uint16_t) < name_size)
+        {
+          return std::unexpected (
+              std::make_error_code (std::errc::invalid_argument));
+        }
+
+      std::string name (name_size, '\0');
+      std::ranges::transform (
+          payload.subspan (sizeof (std::uint16_t), name_size), name.begin (),
+          [] (std::byte b) { return std::to_integer<char> (b); });
+
+      // the name is used as an output path, so only accept a plain file
+      // name that cannot point outside the current directory
+      const std::filesystem::path name_path{ name };
+      if (name.empty () || name == "." || name == ".."
+          || name.find ('\0') != std::string::npos
+          || name_path.filename () != name_path)
+        {
+          return std::unexpected (
+              std::make_error_code (std::errc::invalid_argument));
+        }
+
+      const auto contents
+          = payload.subspan (sizeof (std::uint16_t) + name_size);
+      return file{ name_path, std::vector<std::byte> (contents.begin (),
+                                                      contents.end ()) };
+    }
+  catch (...)
+    {
+      return std::unexpected (
+          std::make_error_code (std::errc::not_enough_memory));
+    }
+}
+
+} // namespace ftv

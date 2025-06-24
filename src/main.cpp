@@ -23,7 +23,7 @@ run_encrypt (const ftv::parameters &params)
 {
   const ftv::file input{ params.input_file };
 
-  const auto encrypted = ftv::encrypt (input.data (), params.key);
+  const auto encrypted = ftv::encrypt (ftv::pack_file (input), params.key);
   if (!encrypted)
     {
       std::println (stderr, "error encrypting {}: {}", params.input_file,
@@ -39,7 +39,7 @@ run_encrypt (const ftv::parameters &params)
       return 1;
     }
 
-  const ftv::metadata data{ params.input_file,
+  const ftv::metadata data{ input.path ().filename ().string (),
                             serialized->size (),
                             ftv::hash (*serialized),
                             params.fps,
@@ -95,13 +95,19 @@ run_decrypt (const ftv::parameters &params)
       return 1;
     }
 
+  const auto restored = ftv::unpack_file (*decrypted);
+  if (!restored)
+    {
+      std::println (stderr, "error: decrypted data is malformed");
+      return 1;
+    }
+
   const std::filesystem::path output_path
       = params.output_file.empty ()
-            ? std::filesystem::path{ vid.get_metadata ().filename ()
-                                     + "_decrypted" }
+            ? restored->path ()
             : std::filesystem::path{ params.output_file };
 
-  if (const auto ec = ftv::write (*decrypted, output_path))
+  if (const auto ec = ftv::write (restored->data (), output_path))
     {
       if (ec == std::errc::file_exists)
         {
