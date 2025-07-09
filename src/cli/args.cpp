@@ -1,6 +1,8 @@
 #include "cli/args.hpp"
+#include "video/header.hpp"
 #include "video/resolution.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <format>
 #include <optional>
@@ -59,6 +61,10 @@ validate (const parameters &params)
     {
       return std::format ("fps must be between 1 and {}", MAX_FPS);
     }
+  if (std::ranges::find (BLOCK_SIZES, params.block_size) == BLOCK_SIZES.end ())
+    {
+      return "block size must be 1, 2, 4 or 8";
+    }
   return std::nullopt;
 }
 
@@ -81,13 +87,17 @@ usage ()
       "  -w, --width <pixels>   video width ({0}-{1}, default: {2})\n"
       "  -H, --height <pixels>  video height ({0}-{1}, default: {3})\n"
       "  -f, --fps <number>     frames per second (1-{4}, default: {5})\n"
+      "  -b, --block <pixels>   side of the square that stores one bit\n"
+      "                         (1, 2, 4 or 8, default: {6}). bigger blocks "
+      "hold\n"
+      "                         less data but survive compression better\n"
       "  -h, --help             show this help message\n"
       "\n"
       "example:\n"
       "  ftv encrypt file.txt -o video.avi -k mypassword -w 640 -H 480 -f 30\n"
       "  ftv decrypt video.avi -k mypassword\n",
       MIN_DIMENSION, MAX_DIMENSION, defaults.width, defaults.height, MAX_FPS,
-      defaults.fps);
+      defaults.fps, defaults.block_size);
 }
 
 [[nodiscard]] std::expected<parameters, std::string>
@@ -160,6 +170,10 @@ parse_arguments (std::span<const std::string_view> args)
       else if (arg == "-f" || arg == "--fps")
         {
           number = &params.fps;
+        }
+      else if (arg == "-b" || arg == "--block")
+        {
+          number = &params.block_size;
         }
       else
         {

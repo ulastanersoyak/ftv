@@ -1,7 +1,12 @@
+#pragma once
+
 #include "video/resolution.hpp"
 
+#include <concepts>
+#include <cstdint>
 #include <filesystem>
 #include <format>
+#include <stdexcept>
 
 #include <opencv2/opencv.hpp>
 
@@ -34,7 +39,6 @@ public:
   initialize (std::size_t fps, const resolution &res)
   requires std::same_as<T, cv::VideoWriter>
   {
-    io_.set (cv::VIDEOWRITER_PROP_QUALITY, 100);
     io_.open (path_.string (), cv::VideoWriter::fourcc ('M', 'J', 'P', 'G'),
               static_cast<double> (fps),
               cv::Size (static_cast<std::int32_t> (res.x),
@@ -45,6 +49,8 @@ public:
         throw std::runtime_error (
             std::format ("failed to open video writer: {}", path_.string ()));
       }
+    // only takes effect on an open writer
+    io_.set (cv::VIDEOWRITER_PROP_QUALITY, 100);
   }
 
   ~video_io ()

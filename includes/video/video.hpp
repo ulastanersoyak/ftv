@@ -1,50 +1,35 @@
 #pragma once
 
-#include "video/metadata.hpp"
-#include "video/pixel.hpp"
-
+#include <cstddef>
 #include <expected>
 #include <filesystem>
-#include <opencv2/core/mat.hpp>
 #include <span>
 #include <system_error>
+#include <vector>
 
 namespace ftv
 {
 
-class video
+struct video_options
 {
-public:
-  explicit video (const std::filesystem::path &path);
-
-  video (const std::filesystem::path &path, const metadata &meta);
-
-  [[nodiscard]] std::error_code
-  write (std::span<const std::byte> bytes) const noexcept;
-  [[nodiscard]] std::error_code
-  write (std::span<const pixel> pixels) const noexcept;
-
-  [[nodiscard]] std::expected<std::vector<pixel>, std::error_code>
-  read () noexcept;
-
-  void set_metadata (std::span<const std::byte> bytes);
-  void set_metadata (const metadata &data);
-
-  [[nodiscard]] metadata get_metadata () const noexcept;
-  [[nodiscard]] std::filesystem::path get_path () const noexcept;
-
-private:
-  void init_metadata ();
-
-  [[nodiscard]] std::size_t read_size_t (const cv::Mat &frame,
-                                         std::size_t start_pos) const;
-
-  [[nodiscard]] std::string read_filename (const cv::Mat &frame,
-                                           std::size_t start_pos,
-                                           std::size_t filename_size) const;
-
-  metadata metadata_;
-  std::filesystem::path path_;
+  std::size_t width{};
+  std::size_t height{};
+  std::size_t fps{};
+  std::size_t block_size{};
 };
+
+// writes data as a black and white video where every
+// block_size x block_size square of pixels holds one bit. the bits start
+// with a header and the data is protected with reed-solomon codes, so a
+// moderate amount of compression damage is repaired when reading
+[[nodiscard]] std::error_code
+write_video (const std::filesystem::path &path,
+             std::span<const std::byte> data,
+             const video_options &options) noexcept;
+
+// reads data written by write_video. the block size is detected from the
+// header
+[[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
+read_video (const std::filesystem::path &path) noexcept;
 
 } // namespace ftv

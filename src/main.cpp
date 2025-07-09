@@ -1,11 +1,8 @@
 #include "cli/args.hpp"
-#include "crypto/checksum.hpp"
 #include "crypto/decrypt.hpp"
 #include "crypto/encrypt.hpp"
 #include "crypto/serialize.hpp"
 #include "file/file.hpp"
-#include "video/metadata.hpp"
-#include "video/pixel.hpp"
 #include "video/video.hpp"
 
 #include <cstdio>
@@ -39,14 +36,10 @@ run_encrypt (const ftv::parameters &params)
       return 1;
     }
 
-  const ftv::metadata data{ input.path ().filename ().string (),
-                            serialized->size (),
-                            ftv::hash (*serialized),
-                            params.fps,
-                            { params.width, params.height } };
-
-  const ftv::video vid{ params.output_file, data };
-  if (const auto ec = vid.write (*serialized))
+  const ftv::video_options options{ params.width, params.height, params.fps,
+                                    params.block_size };
+  if (const auto ec
+      = ftv::write_video (params.output_file, *serialized, options))
     {
       std::println (stderr, "error writing video file {}: {}",
                     params.output_file, ec.message ());
@@ -61,25 +54,17 @@ run_encrypt (const ftv::parameters &params)
 int
 run_decrypt (const ftv::parameters &params)
 {
-  ftv::video vid{ params.input_file };
-
-  const auto pixels = vid.read ();
-  if (!pixels)
+  const auto data = ftv::read_video (params.input_file);
+  if (!data)
     {
-      std::println (stderr, "error reading video file {}: {}",
-                    params.input_file, pixels.error ().message ());
+      std::println (stderr,
+                    "error reading {}: not an ftv video, or too damaged to "
+                    "recover ({})",
+                    params.input_file, data.error ().message ());
       return 1;
     }
 
-  const auto bytes_from_vid = ftv::pixels_to_bytes (*pixels);
-  if (ftv::hash (bytes_from_vid) != vid.get_metadata ().checksum ())
-    {
-      std::println (stderr, "data corruption on video file: {}",
-                    params.input_file);
-      return 1;
-    }
-
-  const auto deserialized = ftv::deserialize_encrypted_data (bytes_from_vid);
+  const auto deserialized = ftv::deserialize_encrypted_data (*data);
   if (!deserialized)
     {
       std::println (stderr, "error deserializing video data: {}",

@@ -1,294 +1,241 @@
-#include <cstddef>
-
-#include "video/pixel.hpp"
 #include "video/video.hpp"
+#include "ecc/reed_solomon.hpp"
+#include "video/header.hpp"
 #include "video/video_io.hpp"
 
+#include <algorithm>
+#include <cstdint>
+#include <new>
+#include <optional>
+
+#include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
 
 namespace ftv
 {
 
-video::video (const std::filesystem::path &path, const metadata &meta)
-    : metadata_{ meta }, path_{ path }
+namespace
 {
+
+inline constexpr double WHITE_THRESHOLD{ 128.0 };
+
+// a header's worth of bytes is read before payload_size can be trusted, so
+// reads are reserved in steps of at most this much
+inline constexpr std::size_t MAX_RESERVE{ 1UZ << 20 };
+
+std::unexpected<std::error_code>
+fail (std::errc error)
+{
+  return std::unexpected (std::make_error_code (error));
 }
 
-video::video (const std::filesystem::path &path) : metadata_{}, path_ (path)
+[[nodiscard]] cv::Rect
+cell_area (std::size_t cell_x, std::size_t cell_y, std::size_t block_size,
+           std::size_t inset)
 {
-  init_metadata ();
+  return { static_cast<std::int32_t> (cell_x * block_size + inset),
+           static_cast<std::int32_t> (cell_y * block_size + inset),
+           static_cast<std::int32_t> (block_size - 2 * inset),
+           static_cast<std::int32_t> (block_size - 2 * inset) };
 }
+
+// reads the video one cell (one bit) at a time, moving to the next frame
+// when the current one is used up
+class cell_reader
+{
+public:
+  cell_reader (const std::filesystem::path &path, std::size_t block_size)
+      : reader_{ path }, block_size_{ block_size },
+        // compression smears the edges of a block into its neighbours, so
+        // larger blocks are sampled without their outer pixels
+        inset_{ block_size >= 4 ? 1UZ : 0UZ }
+  {
+  }
+
+  [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
+  read (std::size_t count)
+  {
+    std::vector<std::byte> bytes{};
+    bytes.reserve (std::min (count, MAX_RESERVE));
+    for (std::size_t i = 0; i < count; ++i)
+      {
+        std::uint8_t value = 0;
+        for (std::size_t bit = 0; bit < 8; ++bit)
+          {
+            const auto cell = this->next_cell ();
+            if (!cell)
+              {
+                return fail (std::errc::result_out_of_range);
+              }
+            value = static_cast<std::uint8_t> ((value << 1) | (*cell ? 1 : 0));
+          }
+        bytes.push_back (std::byte{ value });
+      }
+    return bytes;
+  }
+
+private:
+  [[nodiscard]] bool
+  next_frame ()
+  {
+    cv::Mat frame{};
+    if (!this->reader_.get ().read (frame) || frame.empty ())
+      {
+        return false;
+      }
+    if (frame.channels () == 1)
+      {
+        this->gray_ = frame;
+      }
+    else
+      {
+        cv::cvtColor (frame, this->gray_, cv::COLOR_BGR2GRAY);
+      }
+
+    this->columns_
+        = static_cast<std::size_t> (this->gray_.cols) / this->block_size_;
+    this->cells_
+        = this->columns_
+          * (static_cast<std::size_t> (this->gray_.rows) / this->block_size_);
+    this->cell_ = 0;
+    return this->cells_ > 0;
+  }
+
+  [[nodiscard]] std::optional<bool>
+  next_cell ()
+  {
+    if (this->cell_ >= this->cells_ && !this->next_frame ())
+      {
+        return std::nullopt;
+      }
+    const auto area = cell_area (this->cell_ % this->columns_,
+                                 this->cell_ / this->columns_,
+                                 this->block_size_, this->inset_);
+    ++this->cell_;
+    return cv::mean (this->gray_ (area))[0] >= WHITE_THRESHOLD;
+  }
+
+  video_reader reader_;
+  std::size_t block_size_;
+  std::size_t inset_;
+  cv::Mat gray_{};
+  std::size_t columns_{ 0 };
+  std::size_t cells_{ 0 };
+  std::size_t cell_{ 0 };
+};
+
+} // namespace
 
 [[nodiscard]] std::error_code
-video::write (std::span<const pixel> pixels) const noexcept
+write_video (const std::filesystem::path &path,
+             std::span<const std::byte> data,
+             const video_options &options) noexcept
 {
-  if (this->metadata_.size () == 0)
+  try
     {
-      return std::make_error_code (std::errc::invalid_argument);
-    }
+      if (std::ranges::find (BLOCK_SIZES, options.block_size)
+              == BLOCK_SIZES.end ()
+          || options.fps == 0 || data.size () > MAX_PAYLOAD_SIZE)
+        {
+          return std::make_error_code (std::errc::invalid_argument);
+        }
 
-  if (this->metadata_.res ().x * this->metadata_.res ().y
-      > this->metadata_.res ().x * this->metadata_.res ().y)
+      const std::size_t block = options.block_size;
+      const std::size_t columns = options.width / block;
+      const std::size_t cells_per_frame = columns * (options.height / block);
+      if (cells_per_frame == 0)
+        {
+          return std::make_error_code (std::errc::invalid_argument);
+        }
+
+      auto stream = encode_header ({ block, data.size () });
+      const auto body = rs_encode (data);
+      stream.insert (stream.end (), body.begin (), body.end ());
+
+      video_writer writer{ path };
+      writer.initialize (options.fps, { options.width, options.height });
+
+      const std::size_t total_bits = stream.size () * 8;
+      for (std::size_t bit = 0; bit < total_bits;)
+        {
+          // unused cells at the end of the last frame stay black
+          cv::Mat frame (static_cast<std::int32_t> (options.height),
+                         static_cast<std::int32_t> (options.width), CV_8UC3,
+                         cv::Scalar::all (0));
+
+          for (std::size_t cell = 0;
+               cell < cells_per_frame && bit < total_bits; ++cell, ++bit)
+            {
+              const auto value
+                  = std::to_integer<std::uint8_t> (stream[bit / 8]);
+              if ((value >> (7 - bit % 8)) & 1)
+                {
+                  frame (cell_area (cell % columns, cell / columns, block, 0))
+                      .setTo (cv::Scalar::all (255));
+                }
+            }
+          writer.get ().write (frame);
+        }
+      return {};
+    }
+  catch (const std::bad_alloc &)
     {
-      return std::make_error_code (std::errc::value_too_large);
+      return std::make_error_code (std::errc::not_enough_memory);
     }
-
-  const std::size_t pixels_per_frame
-      = this->metadata_.res ().x * this->metadata_.res ().y;
-
-  video_writer writer{ path_ };
-  writer.get ().set (cv::VIDEOWRITER_PROP_QUALITY, 100);
-
-  writer.get ().open (
-      this->path_.string (), cv::VideoWriter::fourcc ('M', 'J', 'P', 'G'),
-      static_cast<double> (this->metadata_.fps ()),
-      cv::Size (static_cast<std::int32_t> (this->metadata_.res ().x),
-                static_cast<std::int32_t> (this->metadata_.res ().y)));
-
-  if (!writer.get ().isOpened ())
+  catch (...)
     {
       return std::make_error_code (std::errc::io_error);
     }
+}
 
-  for (std::size_t offset = 0; offset < pixels.size ();
-       offset += pixels_per_frame)
+[[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
+read_video (const std::filesystem::path &path) noexcept
+{
+  try
     {
-      cv::Mat frame (static_cast<std::int32_t> (this->metadata_.res ().y),
-                     static_cast<std::int32_t> (this->metadata_.res ().x),
-                     CV_8UC3);
-
-      const size_t pixels_to_copy
-          = std::min (pixels_per_frame, pixels.size () - offset);
-
-      const std::int32_t last_row = static_cast<std::int32_t> (
-          pixels_to_copy / static_cast<std::size_t> (frame.cols));
-
-      const std::int32_t last_col = static_cast<std::int32_t> (
-          pixels_to_copy % static_cast<std::size_t> (frame.cols));
-
-      size_t pixel_idx = 0;
-      for (std::int32_t y = 0; y < last_row; ++y)
+      // the block size is only known once the header is read, so try each
+      // one until a valid header shows up
+      for (const auto block_size : BLOCK_SIZES)
         {
-          for (std::int32_t x = 0; x < frame.cols; ++x)
+          cell_reader reader{ path, block_size };
+          const auto raw_header = reader.read (ENCODED_HEADER_SIZE);
+          if (!raw_header)
             {
-              const auto &pix = pixels[offset + pixel_idx++];
-              uint8_t pixel_val = (pix.b != 0) ? 255 : 0; // Black or white
-              frame.at<cv::Vec3b> (y, x)
-                  = cv::Vec3b (pixel_val, pixel_val, pixel_val);
+              continue;
             }
-        }
-      // fill partial row if needed
-      for (std::int32_t x = 0; x < last_col; ++x)
-        {
-          const auto &pix = pixels[offset + pixel_idx++];
-          uint8_t pixel_val = (pix.b != 0) ? 255 : 0;
-          frame.at<cv::Vec3b> (last_row, x)
-              = cv::Vec3b (pixel_val, pixel_val, pixel_val);
-        }
-      // fill remaining pixels with black (if needed)
-      if (pixels_to_copy < pixels_per_frame)
-        {
-          // fill rest of the last row
-          for (std::int32_t x = last_col; x < frame.cols; ++x)
+
+          const auto decoded = decode_header (*raw_header);
+          if (!decoded)
             {
-              frame.at<cv::Vec3b> (last_row, x) = cv::Vec3b (0, 0, 0);
-            }
-          // fill remaining rows
-          for (std::int32_t y = last_row + 1; y < frame.rows; ++y)
-            {
-              for (std::int32_t x = 0; x < frame.cols; ++x)
+              if (decoded.error () == std::errc::not_supported)
                 {
-                  frame.at<cv::Vec3b> (y, x) = cv::Vec3b (0, 0, 0);
+                  return std::unexpected (decoded.error ());
                 }
+              continue;
             }
-        }
-      writer.get ().write (frame);
-    }
-  return {};
-}
-
-[[nodiscard]] std::error_code
-video::write (std::span<const std::byte> bytes) const noexcept
-{
-  const auto metadata_vec = this->metadata_.to_vec ();
-  const auto metadata_pixels = bytes_to_pixels (metadata_vec);
-
-  std::vector<pixel> all_pixels;
-  all_pixels.reserve (metadata_pixels.size () + bytes.size ());
-  all_pixels.insert (all_pixels.end (), metadata_pixels.begin (),
-                     metadata_pixels.end ());
-
-  const auto data_pixels = bytes_to_pixels (bytes);
-  all_pixels.insert (all_pixels.end (), data_pixels.begin (),
-                     data_pixels.end ());
-
-  return write (all_pixels);
-}
-
-[[nodiscard]] std::expected<std::vector<pixel>, std::error_code>
-video::read () noexcept
-{
-  video_reader reader{ path_.string () };
-  cv::Mat frame{};
-  if (!reader.get ().read (frame) || frame.empty ())
-    {
-      return std::expected<std::vector<pixel>, std::error_code>{
-        std::unexpected (std::make_error_code (std::errc::io_error))
-      };
-    }
-
-  std::vector<pixel> pixel_data;
-  pixel_data.reserve (this->metadata_.file_size () * 8);
-  const std::size_t metadata_bits = this->metadata_.size () * 8;
-  std::size_t row = metadata_bits / static_cast<std::size_t> (frame.cols);
-  std::size_t col = metadata_bits % static_cast<std::size_t> (frame.cols);
-
-  std::size_t pixels_read = 0;
-  const std::size_t expected_pixels = this->metadata_.file_size () * 8;
-
-  while (pixels_read < expected_pixels)
-    {
-      if (row >= static_cast<std::size_t> (frame.rows))
-        {
-          if (!reader.get ().read (frame) || frame.empty ())
+          if (decoded->block_size != block_size)
             {
-              return std::unexpected (
-                  std::make_error_code (std::errc::result_out_of_range));
+              continue;
             }
-          row = 0;
-          col = 0;
-          continue;
-        }
 
-      if (col >= static_cast<std::size_t> (frame.cols))
-        {
-          row++;
-          col = 0;
-          continue;
-        }
-
-      const cv::Vec3b &px = frame.at<cv::Vec3b> (static_cast<int> (row),
-                                                 static_cast<int> (col));
-      std::int8_t white_votes = 0;
-      white_votes += (px[0] >= 128); // B channel
-      white_votes += (px[1] >= 128); // G channel
-      white_votes += (px[2] >= 128); // R channel
-      pixel new_px{ static_cast<std::uint8_t> (white_votes >= 2 ? 255u : 0u),
-                    static_cast<std::uint8_t> (white_votes >= 2 ? 255u : 0u),
-                    static_cast<std::uint8_t> (white_votes >= 2 ? 255u : 0u) };
-      pixel_data.push_back (new_px);
-      pixels_read++;
-      col++;
-    }
-
-  return std::expected<std::vector<pixel>, std::error_code>{ pixel_data };
-}
-
-void
-video::init_metadata ()
-{
-  video_reader reader{ path_ };
-  cv::Mat frame;
-  if (!reader.get ().read (frame) || frame.empty ()
-      || frame.type () != CV_8UC3)
-    {
-      throw std::runtime_error (std::format ("failed to read first frame"));
-    }
-  std::size_t pos = 0;
-  std::size_t filename_size = read_size_t (frame, pos);
-  pos += sizeof (std::size_t) * 8;
-  std::string filename = read_filename (frame, pos, filename_size);
-  pos += filename_size * 8;
-  std::size_t file_size = read_size_t (frame, pos);
-  pos += sizeof (std::size_t) * 8;
-  std::size_t checksum = read_size_t (frame, pos);
-  pos += sizeof (std::size_t) * 8;
-  std::size_t fps = read_size_t (frame, pos);
-  pos += sizeof (std::size_t) * 8;
-  auto x = read_size_t (frame, pos);
-  pos += sizeof (std::size_t) * 8;
-  auto y = read_size_t (frame, pos);
-  resolution res{ x, y };
-  metadata_ = metadata (filename, file_size, checksum, fps, res);
-}
-
-[[nodiscard]] std::size_t
-video::read_size_t (const cv::Mat &frame, std::size_t start_pos) const
-{
-  const std::size_t pixels_per_row = static_cast<std::size_t> (frame.cols);
-  std::vector<std::byte> size_bytes (sizeof (std::size_t));
-
-  for (std::size_t i = 0; i < sizeof (std::size_t) * 8; i += 8)
-    {
-      uint8_t byte_val = 0;
-      for (std::size_t bit = 0; bit < 8; ++bit)
-        {
-          std::size_t pos = start_pos + i + bit;
-          std::size_t row = pos / pixels_per_row;
-          std::size_t col = pos % pixels_per_row;
-
-          cv::Vec3b bgr_px = frame.at<cv::Vec3b> (static_cast<int> (row),
-                                                  static_cast<int> (col));
-
-          bool is_white
-              = (bgr_px[0] > 127) || (bgr_px[1] > 127) || (bgr_px[2] > 127);
-          if (is_white)
+          const auto body
+              = reader.read (rs_encoded_size (decoded->payload_size));
+          if (!body)
             {
-              byte_val |= (1 << (7 - bit));
+              return std::unexpected (body.error ());
             }
+          return rs_decode (*body, decoded->payload_size);
         }
-      size_bytes.at (i / 8) = std::byte (byte_val);
+      return fail (std::errc::bad_message);
     }
-
-  std::size_t result = 0;
-  std::memcpy (&result, size_bytes.data (), sizeof (std::size_t));
-  return result;
-}
-
-[[nodiscard]] std::string
-video::read_filename (const cv::Mat &frame, std::size_t start_pos,
-                      std::size_t filename_size) const
-{
-  const std::size_t pixels_per_row = static_cast<std::size_t> (frame.cols);
-  std::vector<std::byte> filename_bytes;
-  filename_bytes.reserve (filename_size);
-
-  for (std::size_t i = 0; i < filename_size * 8; i += 8)
+  catch (const std::bad_alloc &)
     {
-      uint8_t byte_val = 0;
-      for (size_t bit = 0; bit < 8; ++bit)
-        {
-          std::size_t pos = start_pos + i + bit;
-          std::size_t row = pos / pixels_per_row;
-          std::size_t col = pos % pixels_per_row;
-
-          cv::Vec3b bgr_px = frame.at<cv::Vec3b> (static_cast<int> (row),
-                                                  static_cast<int> (col));
-
-          bool is_white
-              = (bgr_px[0] > 127) || (bgr_px[1] > 127) || (bgr_px[2] > 127);
-          if (is_white)
-            {
-              byte_val |= (1 << (7 - bit));
-            }
-        }
-      filename_bytes.push_back (std::byte (byte_val));
+      return fail (std::errc::not_enough_memory);
     }
-
-  return std::string (reinterpret_cast<const char *> (filename_bytes.data ()),
-                      filename_bytes.size ());
-}
-
-[[nodiscard]] metadata
-video::get_metadata () const noexcept
-{
-  return this->metadata_;
-}
-
-[[nodiscard]] std::filesystem::path
-video::get_path () const noexcept
-{
-  return this->path_;
+  catch (...)
+    {
+      return fail (std::errc::io_error);
+    }
 }
 
 } // namespace ftv

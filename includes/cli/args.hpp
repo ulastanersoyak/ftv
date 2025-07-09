@@ -24,6 +24,7 @@ struct parameters
   std::size_t width{ 300 };
   std::size_t height{ 300 };
   std::size_t fps{ 30 };
+  std::size_t block_size{ 4 };
   bool help{ false };
 };
 
