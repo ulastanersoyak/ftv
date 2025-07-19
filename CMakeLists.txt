@@ -20,6 +20,8 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
       CACHE STRING "build type" FORCE)
 endif()
 
+option(FTV_BUILD_TESTS "build the test suite" ON)
+
 add_compile_options(
   -Wall
   -Wextra
@@ -55,3 +57,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 add_subdirectory(src)
+
+if(FTV_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
